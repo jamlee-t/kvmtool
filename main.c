@@ -8,9 +8,11 @@
 
 static int handle_kvm_command(int argc, char **argv)
 {
+	// kvm_commands 是 run
 	return handle_command(kvm_commands, argc, (const char **) &argv[0]);
 }
 
+// 分析执行 run 命令
 int main(int argc, char *argv[])
 {
 	kvm__set_dir("%s/%s", HOME_DIR, KVM_PID_FILE_PATH);

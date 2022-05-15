@@ -18,6 +18,7 @@
 #include "kvm/builtin-run.h"
 #include "kvm/util.h"
 
+// kvm_cmd_run ./lkvm run 运行的命令是 kvm_cmd_run
 struct cmd_struct kvm_commands[] = {
 	{ "pause",	kvm_cmd_pause,		kvm_pause_help,		0 },
 	{ "resume",	kvm_cmd_resume,		kvm_resume_help,	0 },
@@ -88,4 +89,5 @@ int handle_command(struct cmd_struct *command, int argc, const char **argv)
 	}
 
 	return ret;
+
 }

@@ -433,6 +433,7 @@ int __attribute__((weak)) kvm__get_vm_type(struct kvm *kvm)
 	return KVM_VM_TYPE;
 }
 
+// 在 built-run.c 的 kvm_cmd_run_init 函数中初始化配置完成之后运行。但是这个函数注册是在 main 函数之前被注册
 int kvm__init(struct kvm *kvm)
 {
 	int ret;
@@ -443,7 +444,7 @@ int kvm__init(struct kvm *kvm)
 		goto err;
 	}
 
-	kvm->sys_fd = open(kvm->cfg.dev, O_RDWR);
+	kvm->sys_fd = open(kvm->cfg.dev, O_RDWR); // 打开 /dev/kvm
 	if (kvm->sys_fd < 0) {
 		if (errno == ENOENT)
 			pr_err("'%s' not found. Please make sure your kernel has CONFIG_KVM "
@@ -459,14 +460,14 @@ int kvm__init(struct kvm *kvm)
 		goto err_free;
 	}
 
-	ret = ioctl(kvm->sys_fd, KVM_GET_API_VERSION, 0);
+	ret = ioctl(kvm->sys_fd, KVM_GET_API_VERSION, 0); // 获取 kvm 版本信息
 	if (ret != KVM_API_VERSION) {
 		pr_err("KVM_API_VERSION ioctl");
 		ret = -errno;
 		goto err_sys_fd;
 	}
 
-	kvm->vm_fd = ioctl(kvm->sys_fd, KVM_CREATE_VM, kvm__get_vm_type(kvm));
+	kvm->vm_fd = ioctl(kvm->sys_fd, KVM_CREATE_VM, kvm__get_vm_type(kvm)); // 创建 1 个 vm 得到 vm_fd。
 	if (kvm->vm_fd < 0) {
 		pr_err("KVM_CREATE_VM ioctl");
 		ret = kvm->vm_fd;
@@ -479,7 +480,7 @@ int kvm__init(struct kvm *kvm)
 		goto err_vm_fd;
 	}
 
-	kvm__arch_init(kvm, kvm->cfg.hugetlbfs_path, kvm->cfg.ram_size);
+	kvm__arch_init(kvm, kvm->cfg.hugetlbfs_path, kvm->cfg.ram_size); // 根据架构对 kvm 初始化
 
 	INIT_LIST_HEAD(&kvm->mem_banks);
 	kvm__init_ram(kvm);
@@ -510,7 +511,7 @@ err_free:
 err:
 	return ret;
 }
-core_init(kvm__init);
+core_init(kvm__init); // 定义函数 __init__init，main 函数之前注册到全局变量 init_lists
 
 bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 		const char *initrd_filename, const char *kernel_cmdline)

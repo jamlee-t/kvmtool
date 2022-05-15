@@ -141,6 +141,11 @@ void kvm_cpu__run_on_all_cpus(struct kvm *kvm, struct kvm_cpu_task *task)
 	mutex_unlock(&task_lock);
 }
 
+/////////////////////////////////////////////////////////////////
+//
+// cpu 执行入口
+//
+/////////////////////////////////////////////////////////////////
 int kvm_cpu__start(struct kvm_cpu *cpu)
 {
 	sigset_t sigset;

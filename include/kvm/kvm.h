@@ -76,9 +76,10 @@ struct kvm_mem_bank {
 	u32			slot;
 };
 
+// 自定义 kvm 结构体，代表 1 台虚拟机
 struct kvm {
 	struct kvm_arch		arch;
-	struct kvm_config	cfg;
+	struct kvm_config	cfg; // 非常重要，命令行中读取的参数会存储到这里
 	int			sys_fd;		/* For system ioctls(), i.e. /dev/kvm */
 	int			vm_fd;		/* For VM ioctls() */
 	timer_t			timerid;	/* Posix timer for interrupts */
@@ -87,8 +88,8 @@ struct kvm {
 	struct kvm_cpu		**cpus;
 
 	u32			mem_slots;	/* for KVM_SET_USER_MEMORY_REGION */
-	u64			ram_size;
-	void			*ram_start;
+	u64			ram_size;   // 虚拟机的 ram size 大小
+	void		*ram_start; // 虚拟机的内存起始地址
 	u64			ram_pagesize;
 	struct mutex		mem_banks_lock;
 	struct list_head	mem_banks;
@@ -96,11 +97,11 @@ struct kvm {
 	bool			nmi_disabled;
 	bool			msix_needs_devid;
 
-	const char		*vmlinux;
-	struct disk_image       **disks;
-	int                     nr_disks;
+	const char		*vmlinux; // vmlinux 的路径地址
+	struct disk_image       **disks; // 指向 disk_image 的数组（数组的内容是 struct disk_image       *）
+	int                     nr_disks; // 当前的硬盘块数
 
-	int			vm_state;
+	int			vm_state; // vm 的状态
 
 #ifdef KVM_BRLOCK_DEBUG
 	pthread_rwlock_t	brlock_sem;

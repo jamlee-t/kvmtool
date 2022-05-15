@@ -90,6 +90,8 @@ void kvm_run_set_wrapper_sandbox(void)
 #define OPT_ARCH_RUN(...)
 #endif
 
+// 定义当前的命令行参数列表。name 代表这个 option 的数组、所以一般命名为 options。最终会赋值给 cfg 里面对应的变量。
+// kvm 是有些选项比较特殊使用回调函数的参数，相当于 kvm 会被回调函数赋一些值
 #define BUILD_OPTIONS(name, cfg, kvm)					\
 	struct option name[] = {					\
 	OPT_GROUP("Basic options:"),					\
@@ -169,6 +171,7 @@ void kvm_run_set_wrapper_sandbox(void)
 	OPT_END()							\
 	};
 
+// 启动的时候执行 1 个线程表示 1 个 cpu
 static void *kvm_cpu_thread(void *arg)
 {
 	char name[16];
@@ -199,14 +202,17 @@ panic_kvm:
 	return (void *) (intptr_t) 1;
 }
 
+// kernel 的路径字符串
 static char kernel[PATH_MAX];
 
+// 当前系统的镜像默认所在位置
 static const char *host_kernels[] = {
 	"/boot/vmlinuz",
 	"/boot/bzImage",
 	NULL
 };
 
+// 当前自己编译的的镜像默认所在位置
 static const char *default_kernels[] = {
 	"./bzImage",
 	"arch/" BUILD_ARCH "/boot/bzImage",
@@ -214,6 +220,7 @@ static const char *default_kernels[] = {
 	NULL
 };
 
+// 当前编译的 vmlinux 所在位置
 static const char *default_vmlinux[] = {
 	"vmlinux",
 	"../../../vmlinux",
@@ -247,6 +254,7 @@ static void kernel_usage_with_options(void)
 		KVM_BINARY_NAME);
 }
 
+// 获取母机的 ram 大小
 static u64 host_ram_size(void)
 {
 	long page_size;
@@ -273,6 +281,7 @@ static u64 host_ram_size(void)
  */
 #define RAM_SIZE_RATIO		0.8
 
+// 根据 cpu 数量适配 1 个内存大小
 static u64 get_ram_size(int nr_cpus)
 {
 	u64 available;
@@ -290,6 +299,7 @@ static u64 get_ram_size(int nr_cpus)
 	return ram_size;
 }
 
+// 从默认的内核位置和当前的编译的内核位置查找内核 bzImage 启动
 static const char *find_kernel(void)
 {
 	const char **k;
@@ -519,24 +529,32 @@ static void kvm_run_validate_cfg(struct kvm *kvm)
 		pr_warning("Ignoring initrd file when loading a firmware image");
 }
 
+// 1. kvm 命令运行初始化。把配置项都处理妥当，此时还没开始执行实质性操作。
+// @return: kvm 结构体  
 static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 {
+	// vm 的名称
 	static char default_name[20];
 	unsigned int nr_online_cpus;
-	struct kvm *kvm = kvm__new();
+	struct kvm *kvm = kvm__new(); // 创建 1 个新 kvm结构体（仅结构体分配内存）
 
 	if (IS_ERR(kvm))
 		return kvm;
 
+	// 当前的系统 cpu 数量
 	nr_online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	kvm->cfg.custom_rootfs_name = "default";
 
+	// 分别读取参数，选项通过 options 变量管理。
 	while (argc != 0) {
 		BUILD_OPTIONS(options, &kvm->cfg, kvm);
 		argc = parse_options(argc, argv, options, run_usage,
 				PARSE_OPT_STOP_AT_NON_OPTION |
-				PARSE_OPT_KEEP_DASHDASH);
+				PARSE_OPT_KEEP_DASHDASH);  // 核心吧参数
+
+		// 只要当前有参数就一定会执行
 		if (argc != 0) {
+			// 如果当前入参是 --。执行沙箱命令
 			/* Cusrom options, should have been handled elsewhere */
 			if (strcmp(argv[0], "--") == 0) {
 				if (kvm_run_wrapper == KVM_RUN_SANDBOX) {
@@ -546,6 +564,7 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 				}
 			}
 
+			// 如果 kvm_run_wrapper 是默认模式且 kernel_file 有值。或者沙箱模式且 sandbox 有值
 			if ((kvm_run_wrapper == KVM_RUN_DEFAULT && kvm->cfg.kernel_filename) ||
 				(kvm_run_wrapper == KVM_RUN_SANDBOX && kvm->cfg.sandbox)) {
 				fprintf(stderr, "Cannot handle parameter: "
@@ -568,14 +587,16 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 				 */
 				kvm->cfg.kernel_filename = argv[0];
 			}
-			argv++;
-			argc--;
+			argv++; // 数组指针往后移动 1 个
+			argc--; // 减少 1 个参数
 		}
 
 	}
 
+	// 验证 kvm 的运行参数
 	kvm_run_validate_cfg(kvm);
 
+	// 如果没有 kernel_filename 和 firmware_filename 那么调用查找内核，
 	if (!kvm->cfg.kernel_filename && !kvm->cfg.firmware_filename) {
 		kvm->cfg.kernel_filename = find_kernel();
 
@@ -585,30 +606,39 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 		}
 	}
 
+	// 如果配置的内核文件 bzImage
 	if (kvm->cfg.kernel_filename) {
-		kvm->cfg.vmlinux_filename = find_vmlinux();
+		kvm->cfg.vmlinux_filename = find_vmlinux(); // 查找 vmlinux 文件，找到 bzImage 了，为什么还需要 vmlinux？
 		kvm->vmlinux = kvm->cfg.vmlinux_filename;
 	}
 
+	// 如果没有配置 cpu 数量。则使用默认的 nr_online_cpus。根据当前的系统主机cpu数量来
 	if (kvm->cfg.nrcpus == 0)
 		kvm->cfg.nrcpus = nr_online_cpus;
 
+	// 如果没有配置内存大小，则根据 nrcpus 来确定 1 个合适的 ram 大小
 	if (!kvm->cfg.ram_size)
 		kvm->cfg.ram_size = get_ram_size(kvm->cfg.nrcpus);
 
+	// 如果内存超过限制了
 	if (kvm->cfg.ram_size > host_ram_size())
 		pr_warning("Guest memory size %lluMB exceeds host physical RAM size %lluMB",
 			(unsigned long long)kvm->cfg.ram_size,
 			(unsigned long long)host_ram_size());
 
+	// 转为 MB 的形式
 	kvm->cfg.ram_size <<= MB_SHIFT;
 
+	// kvm 的默认设备 /dev/kvm
 	if (!kvm->cfg.dev)
 		kvm->cfg.dev = DEFAULT_KVM_DEV;
 
+	// 子机的默认 console 是 serial
 	if (!kvm->cfg.console)
 		kvm->cfg.console = DEFAULT_CONSOLE;
 
+	// strncmp() 用来比较两个字符串的前n个字符，区分大小写
+	// 激活的 console 类型有 virtio serial 和 hv
 	if (!strncmp(kvm->cfg.console, "virtio", 6))
 		kvm->cfg.active_console  = CONSOLE_VIRTIO;
 	else if (!strncmp(kvm->cfg.console, "serial", 6))
@@ -618,6 +648,7 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 	else
 		pr_warning("No console!");
 
+	// 设置 kvm 的默认 ip 地址
 	if (!kvm->cfg.host_ip)
 		kvm->cfg.host_ip = DEFAULT_HOST_ADDR;
 
@@ -645,6 +676,11 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 		}
 	}
 
+	// 如果以下参数同时没有。则默认生成必须要用到的参数
+	// nodefaults：没有禁用默认配置
+	// using_rootfs：没有使用 rootfs
+	// disk_image：磁盘镜像没有 1 个
+	// initrd_filename：initrd_filename 没有 1 个
 	if (!kvm->cfg.nodefaults &&
 	    !kvm->cfg.using_rootfs &&
 	    !kvm->cfg.disk_image[0].filename &&
@@ -685,12 +721,17 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 		       kvm->cfg.nrcpus, kvm->cfg.guest_name);
 	}
 
+	// init_lists 是 1 个全局变量列表，里面存了初始化一批初始化方法
 	if (init_list__init(kvm) < 0)
 		die ("Initialisation failed");
 
 	return kvm;
 }
 
+// 2. kvm 的配置项等处理妥当后，开始运行 kvm。
+/*
+1. pthread_create 根据 cpu 数量创建线程，执行 kvm_cpu_thread 方法
+*/
 static int kvm_cmd_run_work(struct kvm *kvm)
 {
 	int i;
@@ -700,6 +741,7 @@ static int kvm_cmd_run_work(struct kvm *kvm)
 			die("unable to create KVM VCPU thread");
 	}
 
+	// 此时主线程阻塞在这里等待所有的线程执行完毕
 	/* Only VCPU #0 is going to exit by itself when shutting down */
 	if (pthread_join(kvm->cpus[0]->thread, NULL) != 0)
 		die("unable to join with vcpu 0");
@@ -717,11 +759,17 @@ static void kvm_cmd_run_exit(struct kvm *kvm, int guest_ret)
 		printf("\n  # KVM session ended normally.\n");
 }
 
+/////////////////////////////////////////////////////////////////
+//
+// 当前 run 命令的入口
+//
+/////////////////////////////////////////////////////////////////
 int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 {
 	int ret = -EFAULT;
 	struct kvm *kvm;
 
+	// 命令行参数传入完成 kvm 结构体的初始化
 	kvm = kvm_cmd_run_init(argc, argv);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
