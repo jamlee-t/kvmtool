@@ -1,3 +1,7 @@
+/*****************************************************************
+这个文件和 kvm/kvm.h 关系紧密。同时在引入头文件时，会引入架构特定的头文件。
+
+*/
 #include "kvm/kvm.h"
 #include "kvm/read-write.h"
 #include "kvm/util.h"
@@ -65,6 +69,7 @@ static char kvm_dir[PATH_MAX];
 
 extern __thread struct kvm_cpu *current_kvm_cpu;
 
+// 设置全局变量 kvm_dir
 static int set_dir(const char *fmt, va_list args)
 {
 	char tmp[PATH_MAX];
@@ -81,6 +86,7 @@ static int set_dir(const char *fmt, va_list args)
 	return 0;
 }
 
+// 对 set_dir 函数的 1 个封装
 void kvm__set_dir(const char *fmt, ...)
 {
 	va_list args;
@@ -95,6 +101,14 @@ const char *kvm__get_dir(void)
 	return kvm_dir;
 }
 
+// 从 Linux 2.6.22 开始，KVM ABI 已经稳定：不兼容的更改是不允许的。 但是，有一个扩展允许对 API 进行向后兼容扩展的工具查询和使用。
+// 扩展机制不基于 Linux 版本号。相反，kvm 定义了扩展标识符和查询工具特定的扩展标识符是否可用。 如果是，一个
+// 一组 ioctl 可供应用程序使用。
+// The API allows the application to query about extensions to the core
+// kvm API.  Userspace passes an extension identifier (an integer) and
+// receives an integer that describes the extension availability.
+// Generally 0 means no and 1 means yes, but some extensions may report
+// additional information in the integer return value.
 bool kvm__supports_vm_extension(struct kvm *kvm, unsigned int extension)
 {
 	static int supports_vm_ext_check = 0;
@@ -134,6 +148,7 @@ bool kvm__supports_extension(struct kvm *kvm, unsigned int extension)
 	return ret;
 }
 
+// 检查kvm中是否存在不支持的 kvm extension
 static int kvm__check_extensions(struct kvm *kvm)
 {
 	int i;
@@ -151,6 +166,7 @@ static int kvm__check_extensions(struct kvm *kvm)
 	return 0;
 }
 
+// 创建 1 个新的 kvm 结构体。
 struct kvm *kvm__new(void)
 {
 	struct kvm *kvm = calloc(1, sizeof(*kvm));
@@ -182,7 +198,7 @@ int kvm__exit(struct kvm *kvm)
 	free(kvm);
 	return 0;
 }
-core_exit(kvm__exit);
+core_exit(kvm__exit); // 注册到 core_exit 全局列表
 
 int kvm__destroy_mem(struct kvm *kvm, u64 guest_phys, u64 size,
 		     void *userspace_addr)
@@ -433,11 +449,13 @@ int __attribute__((weak)) kvm__get_vm_type(struct kvm *kvm)
 	return KVM_VM_TYPE;
 }
 
+// 在初始化列表中运行。不是直接调用
 // 在 built-run.c 的 kvm_cmd_run_init 函数中初始化配置完成之后运行。但是这个函数注册是在 main 函数之前被注册
 int kvm__init(struct kvm *kvm)
 {
 	int ret;
 
+	// 当前母机是否支持虚拟化
 	if (!kvm__arch_cpu_supports_vm()) {
 		pr_err("Your CPU does not support hardware virtualization");
 		ret = -ENOSYS;
@@ -467,30 +485,36 @@ int kvm__init(struct kvm *kvm)
 		goto err_sys_fd;
 	}
 
-	kvm->vm_fd = ioctl(kvm->sys_fd, KVM_CREATE_VM, kvm__get_vm_type(kvm)); // 创建 1 个 vm 得到 vm_fd。
+ 	// 创建 1 个 vm 得到 vm_fd。vm_fd 才能真正代表 1 个vm
+	kvm->vm_fd = ioctl(kvm->sys_fd, KVM_CREATE_VM, kvm__get_vm_type(kvm));
 	if (kvm->vm_fd < 0) {
 		pr_err("KVM_CREATE_VM ioctl");
 		ret = kvm->vm_fd;
 		goto err_sys_fd;
 	}
 
+	// 检查当前母机是否存在不支持的能力。
 	if (kvm__check_extensions(kvm)) {
 		pr_err("A required KVM extension is not supported by OS");
 		ret = -ENOSYS;
 		goto err_vm_fd;
 	}
 
-	kvm__arch_init(kvm, kvm->cfg.hugetlbfs_path, kvm->cfg.ram_size); // 根据架构对 kvm 初始化
+ 	// 根据架构对 kvm 初始化，例如 x86/kvm.c，设置 TSS; 创建 PIT2 定时器硬件; 创建中断芯片。
+	kvm__arch_init(kvm, kvm->cfg.hugetlbfs_path, kvm->cfg.ram_size);
 
+	// 设置 kvm 的内存，kvm__init_ram 也是架构特定的
 	INIT_LIST_HEAD(&kvm->mem_banks);
 	kvm__init_ram(kvm);
 
+	// 没有固件的启动方式，这里我要看没有固件的启动方式
 	if (!kvm->cfg.firmware_filename) {
 		if (!kvm__load_kernel(kvm, kvm->cfg.kernel_filename,
 				kvm->cfg.initrd_filename, kvm->cfg.real_cmdline))
 			die("unable to load kernel %s", kvm->cfg.kernel_filename);
 	}
 
+	// 有固件的启动方式
 	if (kvm->cfg.firmware_filename) {
 		if (!kvm__load_firmware(kvm, kvm->cfg.firmware_filename))
 			die("unable to load firmware image %s: %s", kvm->cfg.firmware_filename, strerror(errno));
@@ -502,6 +526,7 @@ int kvm__init(struct kvm *kvm)
 
 	return 0;
 
+// 关闭和清理
 err_vm_fd:
 	close(kvm->vm_fd);
 err_sys_fd:

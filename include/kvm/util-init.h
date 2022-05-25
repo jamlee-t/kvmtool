@@ -12,6 +12,7 @@ struct init_item {
 int init_list__init(struct kvm *kvm);
 int init_list__exit(struct kvm *kvm);
 
+// 用于添加函数指针到全局变量。
 int init_list_add(struct init_item *t, int (*init)(struct kvm *),
 			int priority, const char *name);
 int exit_list_add(struct init_item *t, int (*init)(struct kvm *),

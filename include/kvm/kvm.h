@@ -5,6 +5,7 @@
 #include "kvm/kvm-arch.h"
 #include "kvm/kvm-config.h"
 #include "kvm/util-init.h"
+// 引入的 kvm.h 是引入的是架构相关的头文件。
 #include "kvm/kvm.h"
 
 #include <stdbool.h>
@@ -76,7 +77,7 @@ struct kvm_mem_bank {
 	u32			slot;
 };
 
-// 自定义 kvm 结构体，代表 1 台虚拟机
+// kvmtool 自定义 kvm 结构体，代表 1 台虚拟机
 struct kvm {
 	struct kvm_arch		arch;
 	struct kvm_config	cfg; // 非常重要，命令行中读取的参数会存储到这里
@@ -108,12 +109,17 @@ struct kvm {
 #endif
 };
 
+// 设置 rootfs 文件地址
 void kvm__set_dir(const char *fmt, ...);
 const char *kvm__get_dir(void);
 
+// 初始化 kvm 结构体
 int kvm__init(struct kvm *kvm);
+// 创建 kvm 结构体
 struct kvm *kvm__new(void);
+// 获取当前推荐的cpu数量
 int kvm__recommended_cpus(struct kvm *kvm);
+// 最大可以以设置的 cpu
 int kvm__max_cpus(struct kvm *kvm);
 int kvm__get_vm_type(struct kvm *kvm);
 void kvm__init_ram(struct kvm *kvm);

@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "list.h": "c",
+        "kvm.h": "c",
+        "kvm-arch.h": "c"
     }
 }

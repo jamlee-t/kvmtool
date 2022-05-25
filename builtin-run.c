@@ -721,7 +721,11 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 		       kvm->cfg.nrcpus, kvm->cfg.guest_name);
 	}
 
+	/////////////////////////////////////////////////////////////////
+	//
 	// init_lists 是 1 个全局变量列表，里面存了初始化一批初始化方法
+	//
+	/////////////////////////////////////////////////////////////////
 	if (init_list__init(kvm) < 0)
 		die ("Initialisation failed");
 

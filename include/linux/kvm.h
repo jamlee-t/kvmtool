@@ -14,6 +14,7 @@
 #include <linux/ioctl.h>
 #include <asm/kvm.h>
 
+// kvm 的稳定版本 12
 #define KVM_API_VERSION 12
 
 /* *** Deprecated interfaces *** */

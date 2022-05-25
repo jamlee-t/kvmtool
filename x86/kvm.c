@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+// 检查当前母机的 kvm 是否支持一下扩展列表。在 ${project}/kvm.c 中会检查
 struct kvm_ext kvm_req_ext[] = {
 	{ DEFINE_KVM_EXT(KVM_CAP_COALESCED_MMIO) },
 	{ DEFINE_KVM_EXT(KVM_CAP_SET_TSS_ADDR) },
@@ -35,6 +36,7 @@ struct kvm_ext kvm_req_ext[] = {
 	{ 0, 0 }
 };
 
+// 测试当前 cpu 是否支持虚拟化
 bool kvm__arch_cpu_supports_vm(void)
 {
 	struct cpuid_regs regs;
@@ -77,6 +79,7 @@ bool kvm__arch_cpu_supports_vm(void)
 	return regs.ecx & (1 << feature);
 }
 
+// kvm.c 中的 kvm__init 会调用到这里。
 /*
  * Allocating RAM size bigger than 4GB requires us to leave a gap
  * in the RAM which is used for PCI MMIO, hotplug, and unconfigured
@@ -85,7 +88,6 @@ bool kvm__arch_cpu_supports_vm(void)
  * If we're required to initialize RAM bigger than 4GB, we will create
  * a gap between 0xe0000000 and 0x100000000 in the guest virtual mem space.
  */
-
 void kvm__init_ram(struct kvm *kvm)
 {
 	u64	phys_start, phys_size;
@@ -121,6 +123,7 @@ void kvm__init_ram(struct kvm *kvm)
 /* Arch-specific commandline setup */
 void kvm__arch_set_cmdline(char *cmdline, bool video)
 {
+	// 内核启动命令行
 	strcpy(cmdline, "noapic noacpi pci=conf1 reboot=k panic=1 i8042.direct=1 "
 				"i8042.dumbkbd=1 i8042.nopnp=1");
 	if (video)
@@ -129,17 +132,19 @@ void kvm__arch_set_cmdline(char *cmdline, bool video)
 		strcat(cmdline, " earlyprintk=serial i8042.noaux=1");
 }
 
+// kvm.c 中的 kvm__init 会调用到这里。
+// 设置 TSS; 创建 PIT2 定时器硬件; 创建中断芯片。
 /* Architecture-specific KVM init */
 void kvm__arch_init(struct kvm *kvm, const char *hugetlbfs_path, u64 ram_size)
 {
 	struct kvm_pit_config pit_config = { .flags = 0, };
 	int ret;
 
-	ret = ioctl(kvm->vm_fd, KVM_SET_TSS_ADDR, 0xfffbd000);
+	ret = ioctl(kvm->vm_fd, KVM_SET_TSS_ADDR, 0xfffbd000); // 设置 TSS
 	if (ret < 0)
 		die_perror("KVM_SET_TSS_ADDR ioctl");
 
-	ret = ioctl(kvm->vm_fd, KVM_CREATE_PIT2, &pit_config);
+	ret = ioctl(kvm->vm_fd, KVM_CREATE_PIT2, &pit_config); // 创建 timer 定时器
 	if (ret < 0)
 		die_perror("KVM_CREATE_PIT2 ioctl");
 
@@ -161,6 +166,7 @@ void kvm__arch_init(struct kvm *kvm, const char *hugetlbfs_path, u64 ram_size)
 
 	madvise(kvm->ram_start, kvm->ram_size, MADV_MERGEABLE);
 
+	// 为 vm 创建中断芯片
 	ret = ioctl(kvm->vm_fd, KVM_CREATE_IRQCHIP);
 	if (ret < 0)
 		die_perror("KVM_CREATE_IRQCHIP ioctl");
@@ -171,6 +177,7 @@ void kvm__arch_delete_ram(struct kvm *kvm)
 	munmap(kvm->ram_start, kvm->ram_size);
 }
 
+// KVM_IRQ_LINE	对给定的虚拟 APIC 触发中断信号
 void kvm__irq_line(struct kvm *kvm, int irq, int level)
 {
 	struct kvm_irq_level irq_level;
